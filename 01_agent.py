@@ -129,12 +129,40 @@ agent= graph.compile(checkpointer=memory)
 
 # Main loop
 while True:
-    exam = input("Select exam (SEBI/RBI/IFSCA/BARC) or quit: ")
+    exam = input("Select exam (SEBI/RBI/IFSCA/BARC) or progress to see your progress or quit: ")
     if exam == 'quit':
         break
+    if exam == 'progress':
+        cursor = conn.cursor()
+        rows = cursor.execute("SELECT exam, subject, topic, AVG(score * 1.0 / total) as avg_score, COUNT(*) as attempts FROM progress GROUP BY exam, subject, topic ORDER BY avg_score ASC").fetchall()
+        weak_area = cursor.execute("SELECT exam, subject, topic, AVG(score * 1.0 / total) as avg_score, COUNT(*) as attempts FROM progress GROUP BY exam, subject, topic HAVING avg_score<0.6 ORDER BY avg_score ASC").fetchall()
+        if(rows):
+            print("\nYour progress:\n")
+            for row in rows:
+                print(f"{row[0]} | {row[1]} | {row[2]} | {round(row[3]*100)}% | {row[4]} attempts")
+        else:
+            print("\nNo progress yet!")
+        if(weak_area):
+            print("\nYour weak areas:\n")
+            for row in weak_area:
+                print(f"{row[0]} | {row[1]} | {row[2]} | {round(row[3]*100)}% | {row[4]} attempts")
+        else:
+            print("\nYou are invincible, No weakness!")        
+        continue
     subject = input("Select subject (DBMS/OS/Networks/DSA): ")
     topic = input("Enter topic: ")
-    config = {"configurable":{"thread_id":(exam + subject + topic).lower()}}
+    response = llm.invoke(f"""Fix any spelling mistakes in this CS topic name and return only the corrected topic name in lowercase, should not be in plural form and there should be nothing else: 
+                          Examples:
+                        - 'graphs' → 'graph'
+                        - 'Stacks' → 'stack'
+                        - 'lnked list' → 'linked list'
+                        - 'TREES' → 'tree'
+                        - 'stck' → 'stack'
+
+                        Topic: {topic}""")
+    topic = topic = re.sub(r'<think>.*?</think>', '', response.content, flags=re.DOTALL).strip().lower()
+    print(f"Topic: {topic}")
+    config = {"configurable":{"thread_id":(exam + subject + topic).lower().replace(" ","_")}}
     # generate content+questions
     agent_response= agent.invoke({"exam": exam, "subject": subject, "topic": topic, "content":"", "questions":[], "evaluation":"", "user_answers":[], "score":0}, config)
     questions= agent_response["questions"]
@@ -160,19 +188,21 @@ while True:
     })
     print(f"\nEvaluation:\n{result['evaluation']}")
     print(f"\nYour Score: {result['score']}/{len(questions)}")
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS progress (
-            exam TEXT,
-            subject TEXT,
-            topic TEXT,
-            score INTEGER,
-            total INTEGER,
-            date TEXT
-        )
-    """)
-    cursor.execute("INSERT INTO progress VALUES (?, ?, ?, ?, ?, ?)",
-        (exam, subject, topic, result["score"], len(questions), str(datetime.now())))
-    conn.commit()
-
+    if(len(questions) > 0):
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS progress (
+                exam TEXT,
+                subject TEXT,
+                topic TEXT,
+                score INTEGER,
+                total INTEGER,
+                date TEXT
+            )
+        """)
+        cursor.execute("INSERT INTO progress VALUES (?, ?, ?, ?, ?, ?)",
+            (exam, subject, topic, result["score"], len(questions), str(datetime.now())))
+        conn.commit()
+    else:
+        print("No questions were generated — not saving this attempt.")
     
