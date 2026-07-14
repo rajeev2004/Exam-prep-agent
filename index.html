@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exam Prep Agent</title>
+    <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+        font-family: 'Segoe UI', sans-serif;
+        background: #0f0f0f;
+        color: #e0e0e0;
+        padding: 40px 20px;
+    }
+
+    .container {
+        max-width: 800px;
+        margin: 0 auto;
+    }
+
+    h1 {
+        text-align: center;
+        margin-bottom: 30px;
+    }
+
+    .tabs {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 20px;
+    }
+
+    .tab-btn {
+        flex: 1;
+        padding: 12px;
+        background: #1a1a1a;
+        color: #888;
+        border: 1px solid #333;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 1rem;
+    }
+
+    .tab-btn.active {
+        background: #4f8ef7;
+        color: white;
+        border-color: #4f8ef7;
+    }
+
+    .tab-content {
+        display: none;
+    }
+
+    .tab-content.active {
+        display: block;
+    }
+
+    .setup-box {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+    }
+
+    select, input {
+        padding: 12px;
+        border-radius: 8px;
+        border: 1px solid #333;
+        background: #1a1a1a;
+        color: #fff;
+        font-size: 0.95rem;
+    }
+
+    input {
+        flex: 1;
+        min-width: 200px;
+    }
+
+    button {
+        padding: 12px 24px;
+        background: #4f8ef7;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 0.95rem;
+    }
+
+    button:hover { background: #3a7ae0; }
+    button:disabled { background: #333; cursor: not-allowed; }
+
+    .status {
+        text-align: center;
+        color: #888;
+        margin-bottom: 20px;
+    }
+
+    .question-card {
+        background: #1a1a1a;
+        border: 1px solid #333;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 16px;
+    }
+
+    .question-text {
+        margin-bottom: 12px;
+        font-weight: 500;
+    }
+
+    .option {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px;
+        border-radius: 6px;
+        cursor: pointer;
+        margin-bottom: 6px;
+    }
+
+    .option:hover { background: #252525; }
+
+    .option input { width: auto; margin: 0; }
+
+    #submitBtn {
+        width: 100%;
+        margin: 20px 0;
+        padding: 16px;
+    }
+
+    .evaluation {
+        background: #1a1a1a;
+        border: 1px solid #333;
+        border-radius: 12px;
+        padding: 24px;
+        line-height: 1.7;
+    }
+
+    .evaluation h1, .evaluation h2, .evaluation h3 {
+        margin: 16px 0 8px;
+    }
+
+    .evaluation ul, .evaluation ol {
+        padding-left: 20px;
+        margin-bottom: 10px;
+    }
+
+    .progress-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 12px;
+        background: #1a1a1a;
+        border: 1px solid #333;
+        border-radius: 8px;
+        margin-bottom: 8px;
+    }
+
+    .weak {
+        border-color: #f75f5f;
+    }
+
+    .progress-container-title {
+        margin: 20px 0 10px;
+        color: #888;
+    }
+
+    .option input[type="radio"] {
+        width: auto;
+        min-width: auto;
+        flex: 0 0 auto; 
+        padding: 0;
+        margin: 0;
+        border: none;
+        background: none;
+        border-radius: 0;
+        flex-shrink: 0;
+    }
+
+    .score-display {
+        text-align: center;
+        font-size: 2rem;
+        font-weight: bold;
+        margin: 20px 0;
+        padding: 20px;
+        border-radius: 12px;
+    }
+
+    .score-good {
+        background: #1a3a1a;
+        color: #4ade80;
+        border: 1px solid #4ade80;
+    }
+
+    .score-bad {
+        background: #3a1a1a;
+        color: #f87171;
+        border: 1px solid #f87171;
+    }
+</style>
+</head>
+<body>
+    <div class="container">
+        <h1>📚 Exam Prep Agent</h1>
+
+        <div class="tabs">
+            <button class="tab-btn active" onclick="showTab('quiz')">Quiz</button>
+            <button class="tab-btn" onclick="showTab('progress')">Progress</button>
+        </div>
+
+        <!-- QUIZ TAB -->
+        <div id="quiz-tab" class="tab-content active">
+            <div class="setup-box">
+                <select id="exam">
+                    <option value="SEBI">SEBI</option>
+                    <option value="RBI">RBI</option>
+                    <option value="IFSCA">IFSCA</option>
+                    <option value="BARC">BARC</option>
+                </select>
+
+                <select id="subject">
+                    <option value="DBMS">DBMS</option>
+                    <option value="OS">OS</option>
+                    <option value="Networks">Networks</option>
+                    <option value="DSA">DSA</option>
+                </select>
+
+                <input type="text" id="topic" placeholder="Enter topic e.g. stack, binary tree" />
+                <button onclick="generateQuiz()" id="generateBtn">Generate Quiz</button>
+            </div>
+
+            <div id="status" class="status"></div>
+
+            <div id="score-display" class="score-display" style="display:none;"></div>
+
+            <div id="questions-container"></div>
+
+            <button id="submitBtn" onclick="submitQuiz()" style="display:none;">Submit All Answers</button>
+
+            <div id="evaluation" class="evaluation"></div>
+        </div>
+
+        <!-- PROGRESS TAB -->
+        <div id="progress-tab" class="tab-content">
+            <button onclick="loadProgress()">Refresh Progress</button>
+            <div id="progress-container"></div>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+        let currentQuestions = []
+        function showTab(tabName){
+            const elements = document.querySelectorAll('.tab-btn, .tab-content');
+            elements.forEach(element => {
+                element.classList.remove('active')
+            });
+            event.target.classList.add('active')
+            document.getElementById(tabName + '-tab').classList.add('active')
+        }
+        document.getElementById('generateBtn').addEventListener('keypress', function(e){
+            if(e.key == 'Enter'){
+                generateQuiz()
+            }
+
+        })
+        async function generateQuiz(){
+            document.getElementById('questions-container').innerHTML = ''
+            document.getElementById('evaluation').innerHTML = ''
+            document.getElementById('submitBtn').style.display = 'none'
+            const status = document.getElementById('status');
+            const generateBtn = document.getElementById('generateBtn')
+            generateBtn.disabled = true
+            generateBtn.textContent = 'Generating...'
+            status.textContent = 'Generating quiz....'
+            const exam = document.getElementById('exam').value;
+            const topic = document.getElementById('topic').value.trim();
+            const subject = document.getElementById('subject').value;
+            const questionContainer = document.getElementById('questions-container');
+            if(!exam || !topic || !subject){
+                generateBtn.disabled = false
+                generateBtn.textContent = 'Generate Quiz'
+                return
+            }
+            try{
+                const response = await fetch('http://127.0.0.1:8002/generate_quiz',{
+                    method : 'POST',
+                    headers : {'content-type': 'application/json'},
+                    body : JSON.stringify({exam, topic, subject})
+                })
+                const quiz = await response.json();
+                currentQuestions = quiz.questions;
+                let html = ``;
+                quiz.questions.forEach((q, index) =>{
+                    html+=`
+                        <div class="question-card">
+                            <p class="question-text">${index + 1}. ${q.question}</p>
+                            <label class="option"><input type="radio" name="q${index}" value="A"> A: ${q.options.A}</label>
+                            <label class="option"><input type="radio" name="q${index}" value="B"> B: ${q.options.B}</label>
+                            <label class="option"><input type="radio" name="q${index}" value="C"> C: ${q.options.C}</label>
+                            <label class="option"><input type="radio" name="q${index}" value="D"> D: ${q.options.D}</label>
+                        </div>
+                    `
+                })
+                questionContainer.innerHTML = html;
+                questionContainer.style.display = 'block';
+                generateBtn.disabled = false
+                generateBtn.textContent = 'Generate Quiz'
+                status.textContent = 'quiz generated...'
+                document.getElementById('submitBtn').style.display = 'block'
+            }catch(err){
+                generateBtn.disabled = false
+                generateBtn.textContent = 'Generate Quiz'
+                status.textContent = '⚠️ Could not generate quiz. Please check if the server is running and try again.'
+                console.error(err)
+            }
+        }
+        async function submitQuiz() {
+            const submitBtn = document.getElementById('submitBtn')
+            submitBtn.disabled = true
+            submitBtn.textContent = 'Evaluating...'
+            const status = document.getElementById('status');
+            const currentExam = document.getElementById('exam').value;
+            const currentTopic = document.getElementById('topic').value.trim();
+            const currentSubject = document.getElementById('subject').value;
+            const userAnswers = []
+            currentQuestions.forEach((q, index) =>{
+                const selected = document.querySelector(`input[name="q${index}"]:checked`)
+                userAnswers.push(selected ? selected.value : "")
+            })
+            try{
+                const response = await fetch('http://127.0.0.1:8002/evaluate', {
+                    method: 'POST',
+                    headers: {'content-type': 'application/json'},
+                    body: JSON.stringify({
+                        questions: currentQuestions,
+                        user_answers: userAnswers,
+                        exam: currentExam,
+                        subject: currentSubject,
+                        topic: currentTopic
+                    })
+                })
+                const data = await response.json()
+                document.getElementById('evaluation').innerHTML = marked.parse(data.Evaluation);
+                status.textContent = `Evaluation is done.`
+                const scoreDisplay = document.getElementById('score-display')
+                const percentage = (data.score / currentQuestions.length) * 100
+                scoreDisplay.textContent = `Score: ${data.score}/${currentQuestions.length} (${Math.round(percentage)}%)`
+                scoreDisplay.className = percentage >= 60 ? 'score-display score-good' : 'score-display score-bad'
+                scoreDisplay.style.display = 'block'
+                status.textContent = ''
+                submitBtn.disabled = false
+                submitBtn.textContent = 'Submit All Answers'
+            }catch(err){
+                status.textContent = '⚠️ Could not evaluate answers. Please check if the server is running and try again.'
+                console.error(err)
+                submitBtn.disabled = false
+                submitBtn.textContent = 'Submit All Answers'
+            }
+        }
+    </script>
+</body>
+</html>

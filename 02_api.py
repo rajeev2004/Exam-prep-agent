@@ -1,19 +1,27 @@
-#imports
-#pip freeze > requirements.txt (creates requirements.file with all the imports)
-
-from langchain_groq import ChatGroq
+from fastapi import FastAPI
+from pydantic import BaseModel
 from langgraph.graph import StateGraph, END
-from langgraph.checkpoint.sqlite import SqliteSaver
-from typing import TypedDict, Annotated, Literal
+from langchain_groq import ChatGroq
 from tavily import TavilyClient
-from datetime import datetime
+from typing import TypedDict
 import sqlite3
+from langgraph.checkpoint.sqlite import SqliteSaver
 import re
+from fastapi.middleware.cors import CORSMiddleware
 import json
+from datetime import datetime
 
 # Initializing
 tavily= TavilyClient()
 llm= ChatGroq(model="qwen/qwen3.6-27b", max_tokens=4096)
+app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 #State of agent
 class ExamPrepState(TypedDict):
@@ -129,30 +137,22 @@ memory= SqliteSaver(conn)
 # Compiling agent
 agent= graph.compile(checkpointer=memory)
 
-# Main loop
-while True:
-    exam = input("Select exam (SEBI/RBI/IFSCA/BARC) or progress to see your progress or quit: ")
-    if exam == 'quit':
-        break
-    if exam == 'progress':
-        cursor = conn.cursor()
-        rows = cursor.execute("SELECT exam, subject, topic, AVG(score * 1.0 / total) as avg_score, COUNT(*) as attempts FROM progress GROUP BY exam, subject, topic ORDER BY avg_score ASC").fetchall()
-        weak_area = cursor.execute("SELECT exam, subject, topic, AVG(score * 1.0 / total) as avg_score, COUNT(*) as attempts FROM progress GROUP BY exam, subject, topic HAVING avg_score<0.6 ORDER BY avg_score ASC").fetchall()
-        if(rows):
-            print("\nYour progress:\n")
-            for row in rows:
-                print(f"{row[0]} | {row[1]} | {row[2]} | {round(row[3]*100)}% | {row[4]} attempts")
-        else:
-            print("\nNo progress yet!")
-        if(weak_area):
-            print("\nYour weak areas:\n")
-            for row in weak_area:
-                print(f"{row[0]} | {row[1]} | {row[2]} | {round(row[3]*100)}% | {row[4]} attempts")
-        else:
-            print("\nYou are invincible, No weakness!")        
-        continue
-    subject = input("Select subject (DBMS/OS/Networks/DSA): ")
-    topic = input("Enter topic: ")
+# Request Model
+class GenerateQuizRequest(BaseModel):
+    exam: str
+    subject: str
+    topic: str
+
+class EvaluateRequest(BaseModel):
+    questions: list
+    user_answers: list
+    exam: str
+    subject: str
+    topic: str
+
+# API ROUTES
+@app.post('/generate_quiz')
+def generate_quiz(request: GenerateQuizRequest):
     response = llm.invoke(f"""Fix any spelling mistakes in this CS topic name and return only the corrected topic name in lowercase, should not be in plural form and there should be nothing else: 
                           Examples:
                         - 'graphs' → 'graph'
@@ -161,36 +161,27 @@ while True:
                         - 'TREES' → 'tree'
                         - 'stck' → 'stack'
 
-                        Topic: {topic}""")
-    topic = topic = re.sub(r'<think>.*?</think>', '', response.content, flags=re.DOTALL).strip().lower()
-    print(f"Topic: {topic}")
-    config = {"configurable":{"thread_id":(exam + subject + topic).lower().replace(" ","_")}}
-    # generate content+questions
-    agent_response= agent.invoke({"exam": exam, "subject": subject, "topic": topic, "content":"", "questions":[], "evaluation":"", "user_answers":[], "score":0}, config)
-    questions= agent_response["questions"]
-    user_answers=[]
-    for question in questions:
-        print(question['question'])
-        print(f"""
-        A: {question['options']['A']}
-        B: {question['options']['B']}
-        C: {question['options']['C']}
-        D: {question['options']['D']}""")
-        user_answer= input("Select an option to lock it( A/B/C/D): ").upper().strip()
-        user_answers.append(user_answer)
+                        Topic: {request.topic}""")
+    topic = re.sub(r'<think>.*?</think>', '', response.content, flags=re.DOTALL).strip().lower()
+    config = {"configurable":{"thread_id":(request.exam + request.subject + topic).lower().replace(" ","_")}}
+    agent_response= agent.invoke({"exam": request.exam, "subject": request.subject, "topic": topic, "content":"", "questions":[], "evaluation":"", "user_answers":[], "score":0}, config)
+    return ({"questions": agent_response['questions']})
+
+@app.post('/evaluate')
+def evaluate(request: EvaluateRequest):
     result = evaluate_answers({
-        "questions": questions,
-        "user_answers": user_answers,
-        "exam": exam,
-        "subject": subject,
-        "topic": topic,
+        "questions": request.questions,
+        "user_answers": request.user_answers,
+        "exam": request.exam,
+        "subject": request.subject,
+        "topic": request.topic,
         "content": "",
         "evaluation": "",
         "score": 0
     })
-    print(f"\nEvaluation:\n{result['evaluation']}")
-    print(f"\nYour Score: {result['score']}/{len(questions)}")
-    if(len(questions) > 0):
+    # print(f"\nEvaluation:\n{result['evaluation']}")
+    # print(f"\nYour Score: {result['score']}/{len(questions)}")
+    if(len(request.questions) > 0):
         cursor = conn.cursor()
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS progress (
@@ -203,8 +194,19 @@ while True:
             )
         """)
         cursor.execute("INSERT INTO progress VALUES (?, ?, ?, ?, ?, ?)",
-            (exam, subject, topic, result["score"], len(questions), str(datetime.now())))
+            (request.exam, request.subject, request.topic, result["score"], len(request.questions), str(datetime.now())))
         conn.commit()
+        return ({"Evaluation": result['evaluation'], "score": result['score']})
     else:
-        print("No questions were generated — not saving this attempt.")
+        return ({"Evaluation": 'No evaluation', "score": 0})
+
+@app.get('/progress')
+def progress():
+    cursor = conn.cursor()
+    rows = cursor.execute("SELECT exam, subject, topic, AVG(score * 1.0 / total) as avg_score, COUNT(*) as attempts FROM progress GROUP BY exam, subject, topic ORDER BY avg_score ASC").fetchall()
+    weak_area = cursor.execute("SELECT exam, subject, topic, AVG(score * 1.0 / total) as avg_score, COUNT(*) as attempts FROM progress GROUP BY exam, subject, topic HAVING avg_score<0.6 ORDER BY avg_score ASC").fetchall()
+    return({
+        "progress": [{"exam": r[0], "subject": r[1], "topic": r[2], "avg_score": round(r[3]*100) if r[3] else 0, "attempts": r[4]} for r in rows],
+        "weak_areas": [{"exam": r[0], "subject": r[1], "topic": r[2], "avg_score": round(r[3]*100) if r[3] else 0, "attempts": r[4]} for r in weak_area]
+    })
     
