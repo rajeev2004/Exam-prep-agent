@@ -255,6 +255,9 @@
             });
             event.target.classList.add('active')
             document.getElementById(tabName + '-tab').classList.add('active')
+            if (tabName === 'progress') {
+                loadProgress()
+            }
         }
         document.getElementById('generateBtn').addEventListener('keypress', function(e){
             if(e.key == 'Enter'){
@@ -262,6 +265,49 @@
             }
 
         })
+        async function loadProgress(){
+            const container = document.getElementById('progress-container')
+            container.innerHTML = '<p style="text-align:center; color:#888;">Loading progress...</p>'
+            let progress = [];
+            let weak_areas = [];
+            try{
+                const response = await fetch('http://127.0.0.1:8002/progress',{
+                    method : 'GET',
+                    headers : ({'content-type' : 'application/json'}),
+                })
+                const data = await response.json()
+                progress = data.progress;
+                let progressHtml = ``
+                let weakHtml = ``
+                if(progress.length===0){
+                    progressHtml = '<p style="color:#888;">No quiz attempts yet. Go take a quiz!</p>'
+                }else{
+                    for (row of progress){
+                    progressHtml += `<div class="progress-row">
+                                <span>${row.exam} | ${row.subject} | ${row.topic}</span>
+                                <span>${row.avg_score}% (${row.attempts} attempts)</span>
+                            </div>`
+                    }
+                }
+                weak_areas = data.weak_areas;
+                if(weak_areas.length===0){
+                    weakHtml = '<p style="color:#4ade80;">No weak areas — great job!</p>'
+                }else{
+                    for (row of weak_areas){
+                        weakHtml += `<div class="progress-row weak">
+                            <span>${row.exam} | ${row.subject} | ${row.topic}</span>
+                            <span>${row.avg_score}% (${row.attempts} attempts)</span>
+                        </div>`
+                    }
+                }
+                container.innerHTML = 
+                `<h3 class="progress-container-title">Weak Areas</h3>${weakHtml}
+                <h3 class="progress-container-title">All Progress</h3>${progressHtml}`
+            }catch(err){
+                container.innerHTML = '<p style="text-align:center; color:#f87171;">⚠️ Could not load progress. Check if server is running.</p>'
+                console.error(`Error fetching the progress report, ${err}`);
+            }
+        }
         async function generateQuiz(){
             document.getElementById('questions-container').innerHTML = ''
             document.getElementById('evaluation').innerHTML = ''
